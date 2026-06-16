@@ -1,6 +1,6 @@
 # Pool Test Advisor
 
-A simple web app for tracking swimming pool water test results and receiving chemistry recommendations.
+A simple web app for tracking swimming pool water test results and receiving chemistry recommendations. Updated V2 deployment.
 
 ## Features
 
