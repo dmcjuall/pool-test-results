@@ -1,204 +1,120 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pool Test Results</title>
-
-<style>
-body{
-  font-family:Arial,sans-serif;
-  max-width:800px;
-  margin:auto;
-  padding:20px;
-  background:#f4f7fb;
-}
-
-.card{
-  background:white;
-  padding:20px;
-  border-radius:12px;
-  margin-bottom:20px;
-  box-shadow:0 2px 8px rgba(0,0,0,.1);
-}
-
-label{
-  display:block;
-  margin-top:15px;
-}
-
-input,select{
-  width:100%;
-  padding:10px;
-  margin-top:5px;
-  box-sizing:border-box;
-}
-
-small{
-  color:#666;
-}
-
-button{
-  margin-top:20px;
-  padding:12px 20px;
-  border:none;
-  border-radius:8px;
-  cursor:pointer;
-}
-
-.primary{
-  background:#2563eb;
-  color:white;
-}
-
-.secondary{
-  background:#ddd;
-}
-
-.result{
-  background:#fff;
-  padding:20px;
-  border-radius:12px;
-}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0f766e" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <title>Pool Test Advisor V2</title>
+  <style>
+    :root{
+      --bg:#f4f7fb;--card:#fff;--ink:#102033;--muted:#64748b;--line:#d8e2ee;
+      --primary:#0f766e;--primaryDark:#115e59;--good:#15803d;--warn:#b45309;--bad:#dc2626;
+    }
+    *{box-sizing:border-box}
+    body{font-family:Arial,Helvetica,sans-serif;max-width:1180px;margin:auto;padding:20px;background:var(--bg);color:var(--ink)}
+    h1{margin:0 0 8px;font-size:clamp(28px,5vw,44px)}
+    h2{margin:0 0 12px}.sub{color:var(--muted);margin:0 0 18px}
+    .card{background:var(--card);padding:18px;border-radius:14px;margin-bottom:16px;box-shadow:0 1px 8px rgba(15,23,42,.10)}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+    label{display:block;font-weight:700;margin-bottom:5px;font-size:14px}
+    input,select,button{padding:11px;width:100%;border:1px solid var(--line);border-radius:10px;font-size:16px;background:white}
+    button{cursor:pointer;border:0;background:var(--primary);color:white;font-weight:700}
+    button:hover{background:var(--primaryDark)}
+    button.secondary{background:#e2e8f0;color:#102033}button.danger{background:#fee2e2;color:#991b1b}.actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:14px}
+    table{width:100%;border-collapse:collapse;font-size:14px}th,td{border-bottom:1px solid var(--line);padding:9px;text-align:center}th{background:#f8fafc}.tablewrap{overflow-x:auto}
+    .pill{display:inline-block;padding:4px 9px;border-radius:999px;font-weight:700;font-size:13px}.good{color:var(--good)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+    .note{padding:10px 12px;border-radius:10px;background:#f8fafc;border:1px solid var(--line);margin:8px 0}.dose{font-weight:700}.small{font-size:13px;color:var(--muted)}
+    canvas{width:100%;max-height:310px;border:1px solid var(--line);border-radius:12px;background:white;margin-top:8px}.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+  </style>
 </head>
 <body>
+  <h1>Pool Test Advisor V2</h1>
+  <p class="sub">Local-only pool history, charts, dosage estimates, CSV export, and installable PWA support. Default volume is 20,000 gal.</p>
 
-<h1>Pool Test Advisor</h1>
+  <div class="card">
+    <h2>Water Test</h2>
+    <div class="grid">
+      <div><label for="volume">Pool Volume (gal)</label><input id="volume" type="number" value="20000" min="1" /></div>
+      <div><label for="poolType">Pool Type</label><select id="poolType"><option>Chlorine</option><option>Saltwater</option></select></div>
+      <div><label for="surface">Surface</label><select id="surface"><option>Vinyl</option><option>Fiberglass</option><option>Plaster</option></select></div>
+      <div><label for="fc">Free Chlorine / FC ppm</label><input id="fc" type="number" step="0.1" inputmode="decimal" /></div>
+      <div><label for="cc">Combined Chlorine / CC ppm</label><input id="cc" type="number" step="0.1" inputmode="decimal" /></div>
+      <div><label for="ph">pH</label><input id="ph" type="number" step="0.1" inputmode="decimal" /></div>
+      <div><label for="ta">Total Alkalinity / TA ppm</label><input id="ta" type="number" inputmode="numeric" /></div>
+      <div><label for="ch">Calcium Hardness / CH ppm</label><input id="ch" type="number" inputmode="numeric" /></div>
+      <div><label for="cya">CYA / Stabilizer ppm</label><input id="cya" type="number" inputmode="numeric" /></div>
+    </div>
+    <div class="actions">
+      <button onclick="analyze()">Analyze & Save</button>
+      <button class="secondary" onclick="resetForm()">New Water Test</button>
+      <button class="secondary" onclick="exportCSV()">Export CSV</button>
+      <button class="danger" onclick="clearHistory()">Clear History</button>
+    </div>
+  </div>
 
-<div class="card">
+  <div class="card"><h2>Recommendations</h2><div id="results" class="small">Enter your test results and click Analyze & Save.</div></div>
 
-<label>
-Pool Type
-<select id="poolType">
-<option>Chlorine</option>
-<option>Saltwater</option>
-</select>
-</label>
+  <div class="two">
+    <div class="card"><h2>FC, pH, CYA Trend</h2><canvas id="trendChart" width="900" height="360"></canvas></div>
+    <div class="card"><h2>Latest Test vs Target</h2><canvas id="targetChart" width="900" height="360"></canvas></div>
+  </div>
 
-<label>
-Free Chlorine (FC)
-<input id="fc" type="number" step="0.1">
-<small>ppm • FC depends on CYA</small>
-</label>
-
-<label>
-Combined Chlorine (CC)
-<input id="cc" type="number" step="0.1">
-<small>Goal ≤ 0.5 ppm</small>
-</label>
-
-<label>
-pH
-<input id="ph" type="number" step="0.1">
-<small>Ideal: 7.2–7.8</small>
-</label>
-
-<label>
-Total Alkalinity (TA)
-<input id="ta" type="number">
-<small>Typical: 80–120 ppm</small>
-</label>
-
-<label>
-Calcium Hardness (CH)
-<input id="ch" type="number">
-<small>Typical: 200–400 ppm</small>
-</label>
-
-<label>
-CYA
-<input id="cya" type="number">
-<small>Typical: 30–50 ppm (chlorine pools)</small>
-</label>
-
-<button class="primary" onclick="analyzePool()">
-Analyze Pool
-</button>
-
-<button class="secondary" onclick="resetForm()">
-New Water Test
-</button>
-
-</div>
-
-<div id="results" class="result"></div>
+  <div class="card"><h2>History</h2><div id="history"></div></div>
 
 <script>
+const STORAGE_KEY='poolHistoryV2';
+const $=id=>document.getElementById(id);
+const fields=['fc','cc','ph','ta','ch','cya'];
+const targets={ph:[7.2,7.8],ta:[80,120],chVinyl:[50,300],chFiberglass:[150,350],chPlaster:[250,450],cyaChlorine:[30,60],cyaSaltwater:[60,80]};
 
-function analyzePool(){
+function getHistory(){return JSON.parse(localStorage.getItem(STORAGE_KEY)||localStorage.getItem('poolHistory')||'[]').map(normalizeRow)}
+function saveHistory(h){localStorage.setItem(STORAGE_KEY,JSON.stringify(h));}
+function normalizeRow(r){return {date:r.date||new Date().toLocaleString(),ts:r.ts||Date.now(),volume:+(r.volume||$('volume')?.value||20000),poolType:r.poolType||'Chlorine',surface:r.surface||'Vinyl',fc:+r.fc||0,cc:+r.cc||0,ph:+r.ph||0,ta:+r.ta||0,ch:+r.ch||0,cya:+r.cya||0};}
+function targetFC(cya){return Math.max(2, +(cya||0)*0.075)}
+function chRange(surface){return surface==='Plaster'?targets.chPlaster:surface==='Fiberglass'?targets.chFiberglass:targets.chVinyl}
+function cyaRange(type){return type==='Saltwater'?targets.cyaSaltwater:targets.cyaChlorine}
+function readInputs(){let r={date:new Date().toLocaleString(),ts:Date.now(),volume:+$('volume').value||20000,poolType:$('poolType').value,surface:$('surface').value};fields.forEach(f=>r[f]=+$ (f).value||0);return r}
+function fmt(n,d=1){return Number.isFinite(n)?n.toFixed(d):'0'}
 
-let fc=parseFloat(document.getElementById("fc").value||0);
-let cc=parseFloat(document.getElementById("cc").value||0);
-let ph=parseFloat(document.getElementById("ph").value||0);
-let ta=parseFloat(document.getElementById("ta").value||0);
-let cya=parseFloat(document.getElementById("cya").value||0);
+function buildRecommendations(r){
+  const rec=[],dose=[]; const fcTarget=targetFC(r.cya); const [chLow,chHigh]=chRange(r.surface); const [cyaLow,cyaHigh]=cyaRange(r.poolType);
+  if(r.fc===0) rec.push(['bad','🚨 FC is zero. Add chlorine immediately and retest.']);
+  else if(r.fc<fcTarget) rec.push(['warn',`⚠ FC is low for CYA ${r.cya}. Target is about ${fmt(fcTarget,1)} ppm.`]);
+  else rec.push(['good',`✅ FC is at or above the CYA-based target of ${fmt(fcTarget,1)} ppm.`]);
+  if(r.cc>0.5) rec.push(['warn','⚠ CC is elevated. Watch for odor/cloudiness; consider SLAM guidance if it persists.']);
+  if(r.ph && r.ph<7.2) rec.push(['warn','⚠ pH is low. Raise pH before swimming comfort becomes an issue.']);
+  if(r.ph>7.8) rec.push(['warn','⚠ pH is high. Add muriatic acid/a pH reducer estimate below.']);
+  if(r.ta && r.ta<80) rec.push(['warn','⚠ TA is low. Baking soda estimate below targets 80 ppm.']);
+  if(r.ta>120) rec.push(['warn','⚠ TA is high. Lower gradually with acid/aeration if pH also trends high.']);
+  if(r.ch && (r.ch<chLow||r.ch>chHigh)) rec.push(['warn',`⚠ CH is outside the typical ${r.surface} range (${chLow}-${chHigh} ppm).`]);
+  if(r.cya && r.cya<cyaLow) rec.push(['warn',`⚠ CYA is below the usual ${r.poolType} range (${cyaLow}-${cyaHigh} ppm).`]);
+  if(r.cya>cyaHigh && r.cya<=100) rec.push(['warn',`⚠ CYA is elevated. Avoid tabs/dichlor shock; use liquid chlorine.`]);
+  if(r.cya>100) rec.push(['bad','🚨 CYA is very high. Consider partial drain/refill.']);
 
-let output="";
-
-if(fc===0){
- output+="🚨 Add chlorine immediately.<br><br>";
+  const fcNeeded=Math.max(0,fcTarget-r.fc); const gal10=(fcNeeded*r.volume)/100000; const gal125=(fcNeeded*r.volume)/125000;
+  if(gal10>0.01) dose.push(`10% liquid chlorine: <span class="dose">${fmt(gal10,2)} gal</span> (${fmt(gal10*128,0)} fl oz). 12.5%: <span class="dose">${fmt(gal125,2)} gal</span>.`);
+  if(r.ta && r.ta<80){const lbs=((80-r.ta)*r.volume/10000)*0.14; dose.push(`Baking soda to raise TA to 80 ppm: <span class="dose">${fmt(lbs,1)} lb</span>.`)}
+  if(r.ph>7.8){const oz=((r.ph-7.6)/0.2)*(r.volume/10000)*12; dose.push(`Rough muriatic acid estimate to lower pH toward 7.6: <span class="dose">${fmt(Math.max(0,oz),0)} fl oz</span>. Add in stages and retest.`)}
+  if(r.cya && r.cya<cyaLow){const lbs=((cyaLow-r.cya)*r.volume/10000)*0.083; dose.push(`Stabilizer estimate to reach ${cyaLow} ppm CYA: <span class="dose">${fmt(lbs,1)} lb</span>.`)}
+  return {rec,dose,fcTarget,chLow,chHigh,cyaLow,cyaHigh};
 }
+function analyze(){const r=readInputs(); const h=getHistory(); h.unshift(r); saveHistory(h); renderResults(r); renderAll();}
+function renderResults(r){const b=buildRecommendations(r); $('results').innerHTML=b.rec.map(x=>`<div class="note ${x[0]}">${x[1]}</div>`).join('')+`<h3>Dosage estimates</h3>`+(b.dose.length?b.dose.map(x=>`<div class="note">${x}</div>`).join(''):'<div class="note good">No chemical additions estimated from current inputs.</div>')+'<p class="small">Dosages are estimates. Add chemicals separately, circulate, and retest before adding more.</p>';}
+function renderHistory(){const h=getHistory(); if(!h.length){$('history').innerHTML='<p class="small">No saved tests yet.</p>';return} let html='<div class="tablewrap"><table><tr><th>Date</th><th>FC</th><th>CC</th><th>pH</th><th>TA</th><th>CH</th><th>CYA</th><th>Delete</th></tr>'; h.forEach((r,i)=>html+=`<tr><td>${r.date}</td><td>${r.fc}</td><td>${r.cc}</td><td>${r.ph}</td><td>${r.ta}</td><td>${r.ch}</td><td>${r.cya}</td><td><button class="danger" onclick="delRow(${i})">X</button></td></tr>`); $('history').innerHTML=html+'</table></div>';}
+function delRow(i){const h=getHistory();h.splice(i,1);saveHistory(h);renderAll();}
+function clearHistory(){if(confirm('Delete all saved pool history?')){localStorage.removeItem(STORAGE_KEY);localStorage.removeItem('poolHistory');renderAll();}}
+function exportCSV(){const h=getHistory(); if(!h.length){alert('No history to export.');return} const cols=['date','volume','poolType','surface','fc','cc','ph','ta','ch','cya']; const csv=[cols.join(','),...h.map(r=>cols.map(c=>`"${String(r[c]??'').replaceAll('"','""')}"`).join(','))].join('\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='pool-history.csv'; a.click(); URL.revokeObjectURL(a.href);}
+function resetForm(){fields.forEach(f=>$(f).value='');$('results').innerHTML='Enter your test results and click Analyze & Save.';}
 
-if(cc>0.5){
- output+="⚠ Combined chlorine elevated.<br><br>";
-}
-
-if(ta<60 && ph<7.2){
- output+="⚠ Raise alkalinity first, then retest pH.<br><br>";
-}
-
-if(cya>60 && cya<=80){
- output+="ℹ CYA elevated. Avoid tablets and powdered shock. Use liquid chlorine.<br><br>";
-}
-
-if(cya>100){
- output+="⚠ Consider partial drain/refill due to high CYA.<br><br>";
-}
-
-if(output===""){
- output="✅ Nothing obvious needs correction.";
-}
-
-document.getElementById("results").innerHTML=output;
-
-saveHistory();
-
-}
-
-function resetForm(){
-
-document.querySelectorAll("input").forEach(i=>{
- i.value="";
-});
-
-document.getElementById("results").innerHTML="";
-
-}
-
-function saveHistory(){
-
-let history=
-JSON.parse(localStorage.getItem("poolHistory")||"[]");
-
-history.unshift({
- date:new Date().toLocaleString(),
- fc:document.getElementById("fc").value,
- cc:document.getElementById("cc").value,
- ph:document.getElementById("ph").value,
- ta:document.getElementById("ta").value,
- ch:document.getElementById("ch").value,
- cya:document.getElementById("cya").value
-});
-
-localStorage.setItem(
- "poolHistory",
- JSON.stringify(history)
-);
-
-}
-
+function drawLineChart(){const c=$('trendChart'),ctx=c.getContext('2d'),h=getHistory().slice(0,12).reverse(); clearCanvas(ctx,c); if(!h.length){emptyChart(ctx,c,'No history yet');return} const pad=42,w=c.width,hgt=c.height,max=Math.max(100,...h.flatMap(r=>[r.fc,r.ph,r.cya])); axes(ctx,c,pad,max); const colors=['#0f766e','#2563eb','#f97316']; [['fc','FC'],['ph','pH'],['cya','CYA']].forEach((s,si)=>{ctx.strokeStyle=colors[si];ctx.lineWidth=3;ctx.beginPath();h.forEach((r,i)=>{const x=pad+(i*(c.width-pad*1.5))/(Math.max(1,h.length-1));const y=c.height-pad-(r[s[0]]/max)*(c.height-pad*1.6);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();ctx.fillStyle=colors[si];ctx.fillText(s[1],pad+si*60,20);});}
+function drawTargetChart(){const c=$('targetChart'),ctx=c.getContext('2d'),h=getHistory(); clearCanvas(ctx,c); if(!h.length){emptyChart(ctx,c,'No latest test yet');return} const r=h[0],b=buildRecommendations(r),items=[['FC',r.fc,b.fcTarget],['pH',r.ph,7.6],['TA',r.ta,100],['CH',r.ch,(b.chLow+b.chHigh)/2],['CYA',r.cya,(b.cyaLow+b.cyaHigh)/2]]; const max=Math.max(...items.flatMap(x=>[x[1],x[2]]),10)*1.15,pad=48,barW=32,gap=(c.width-pad*2)/items.length; axes(ctx,c,pad,max); items.forEach((it,i)=>{const x=pad+i*gap+gap/2-38; const actualH=(it[1]/max)*(c.height-pad*1.6), targetH=(it[2]/max)*(c.height-pad*1.6); ctx.fillStyle='#0f766e';ctx.fillRect(x,c.height-pad-actualH,barW,actualH);ctx.fillStyle='#94a3b8';ctx.fillRect(x+barW+8,c.height-pad-targetH,barW,targetH);ctx.fillStyle='#102033';ctx.fillText(it[0],x+8,c.height-18);}); ctx.fillStyle='#0f766e';ctx.fillText('Actual',pad,20);ctx.fillStyle='#94a3b8';ctx.fillText('Target',pad+75,20);}
+function clearCanvas(ctx,c){ctx.clearRect(0,0,c.width,c.height);ctx.font='14px Arial';ctx.fillStyle='#102033'}
+function emptyChart(ctx,c,t){ctx.fillStyle='#64748b';ctx.fillText(t,30,50)}
+function axes(ctx,c,pad,max){ctx.strokeStyle='#d8e2ee';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad,20);ctx.lineTo(pad,c.height-pad);ctx.lineTo(c.width-20,c.height-pad);ctx.stroke();ctx.fillStyle='#64748b';for(let i=0;i<=4;i++){let y=c.height-pad-i*(c.height-pad*1.6)/4;ctx.fillText(Math.round(max*i/4),8,y+4);ctx.strokeStyle='#eef2f7';ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(c.width-20,y);ctx.stroke();}}
+function renderAll(){renderHistory();drawLineChart();drawTargetChart();}
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));}
+renderAll();
 </script>
-
 </body>
 </html>
