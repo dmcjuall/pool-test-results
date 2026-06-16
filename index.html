@@ -1,10 +1,204 @@
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pool Test Results</title>
+
+<style>
+body{
+  font-family:Arial,sans-serif;
+  max-width:800px;
+  margin:auto;
+  padding:20px;
+  background:#f4f7fb;
+}
+
+.card{
+  background:white;
+  padding:20px;
+  border-radius:12px;
+  margin-bottom:20px;
+  box-shadow:0 2px 8px rgba(0,0,0,.1);
+}
+
+label{
+  display:block;
+  margin-top:15px;
+}
+
+input,select{
+  width:100%;
+  padding:10px;
+  margin-top:5px;
+  box-sizing:border-box;
+}
+
+small{
+  color:#666;
+}
+
+button{
+  margin-top:20px;
+  padding:12px 20px;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+.primary{
+  background:#2563eb;
+  color:white;
+}
+
+.secondary{
+  background:#ddd;
+}
+
+.result{
+  background:#fff;
+  padding:20px;
+  border-radius:12px;
+}
+</style>
 </head>
 <body>
-<h1>Pool Test Results</h1>
-<p>If you can read this, GitHub Pages is working!</p>
+
+<h1>Pool Test Advisor</h1>
+
+<div class="card">
+
+<label>
+Pool Type
+<select id="poolType">
+<option>Chlorine</option>
+<option>Saltwater</option>
+</select>
+</label>
+
+<label>
+Free Chlorine (FC)
+<input id="fc" type="number" step="0.1">
+<small>ppm • FC depends on CYA</small>
+</label>
+
+<label>
+Combined Chlorine (CC)
+<input id="cc" type="number" step="0.1">
+<small>Goal ≤ 0.5 ppm</small>
+</label>
+
+<label>
+pH
+<input id="ph" type="number" step="0.1">
+<small>Ideal: 7.2–7.8</small>
+</label>
+
+<label>
+Total Alkalinity (TA)
+<input id="ta" type="number">
+<small>Typical: 80–120 ppm</small>
+</label>
+
+<label>
+Calcium Hardness (CH)
+<input id="ch" type="number">
+<small>Typical: 200–400 ppm</small>
+</label>
+
+<label>
+CYA
+<input id="cya" type="number">
+<small>Typical: 30–50 ppm (chlorine pools)</small>
+</label>
+
+<button class="primary" onclick="analyzePool()">
+Analyze Pool
+</button>
+
+<button class="secondary" onclick="resetForm()">
+New Water Test
+</button>
+
+</div>
+
+<div id="results" class="result"></div>
+
+<script>
+
+function analyzePool(){
+
+let fc=parseFloat(document.getElementById("fc").value||0);
+let cc=parseFloat(document.getElementById("cc").value||0);
+let ph=parseFloat(document.getElementById("ph").value||0);
+let ta=parseFloat(document.getElementById("ta").value||0);
+let cya=parseFloat(document.getElementById("cya").value||0);
+
+let output="";
+
+if(fc===0){
+ output+="🚨 Add chlorine immediately.<br><br>";
+}
+
+if(cc>0.5){
+ output+="⚠ Combined chlorine elevated.<br><br>";
+}
+
+if(ta<60 && ph<7.2){
+ output+="⚠ Raise alkalinity first, then retest pH.<br><br>";
+}
+
+if(cya>60 && cya<=80){
+ output+="ℹ CYA elevated. Avoid tablets and powdered shock. Use liquid chlorine.<br><br>";
+}
+
+if(cya>100){
+ output+="⚠ Consider partial drain/refill due to high CYA.<br><br>";
+}
+
+if(output===""){
+ output="✅ Nothing obvious needs correction.";
+}
+
+document.getElementById("results").innerHTML=output;
+
+saveHistory();
+
+}
+
+function resetForm(){
+
+document.querySelectorAll("input").forEach(i=>{
+ i.value="";
+});
+
+document.getElementById("results").innerHTML="";
+
+}
+
+function saveHistory(){
+
+let history=
+JSON.parse(localStorage.getItem("poolHistory")||"[]");
+
+history.unshift({
+ date:new Date().toLocaleString(),
+ fc:document.getElementById("fc").value,
+ cc:document.getElementById("cc").value,
+ ph:document.getElementById("ph").value,
+ ta:document.getElementById("ta").value,
+ ch:document.getElementById("ch").value,
+ cya:document.getElementById("cya").value
+});
+
+localStorage.setItem(
+ "poolHistory",
+ JSON.stringify(history)
+);
+
+}
+
+</script>
+
 </body>
 </html>
