@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0f766e" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <title>Pool Test Advisor V2</title>
+  <title>Pool Test Advisor V2.3</title>
   <style>
     :root{
       --bg:#f4f7fb;--card:#fff;--ink:#102033;--muted:#64748b;--line:#d8e2ee;
@@ -25,11 +25,21 @@
     table{width:100%;border-collapse:collapse;font-size:14px}th,td{border-bottom:1px solid var(--line);padding:9px;text-align:center}th{background:#f8fafc}.tablewrap{overflow-x:auto}
     .pill{display:inline-block;padding:4px 9px;border-radius:999px;font-weight:700;font-size:13px}.good{color:var(--good)}.warn{color:var(--warn)}.bad{color:var(--bad)}
     .note{padding:10px 12px;border-radius:10px;background:#f8fafc;border:1px solid var(--line);margin:8px 0}.dose{font-weight:700}.small{font-size:13px;color:var(--muted)}
-    canvas{width:100%;max-height:310px;border:1px solid var(--line);border-radius:12px;background:white;margin-top:8px}.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+    canvas{width:100%;height:auto;border:1px solid var(--line);border-radius:12px;background:white;margin-top:8px}
+    .two{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+    details.chart-accordion{background:#fff;border:1px solid var(--line);border-radius:12px;margin:10px 0;overflow:hidden}
+    details.chart-accordion[open]{box-shadow:0 1px 6px rgba(15,23,42,.08)}
+    details.chart-accordion summary{cursor:pointer;font-weight:700;padding:14px 16px;background:#f8fafc;list-style:none}
+    details.chart-accordion summary::-webkit-details-marker{display:none}
+    details.chart-accordion summary:before{content:'▶ ';color:var(--primary);font-weight:900}
+    details.chart-accordion[open] summary:before{content:'▼ '}
+    .chart-body{padding:14px 16px 18px}
+    .chart-note{font-size:13px;color:var(--muted);margin:6px 0 0}
+    .hidden{display:none!important}
   </style>
 </head>
 <body>
-  <h1>Pool Test Advisor V2</h1>
+  <h1>Pool Test Advisor V2.3</h1>
   <p class="sub">Local-only pool history, charts, dosage estimates, CSV export, and installable PWA support. Default volume is 20,000 gal.</p>
 
   <div class="card">
@@ -55,65 +65,237 @@
 
   <div class="card"><h2>Recommendations</h2><div id="results" class="small">Enter your test results and click Analyze & Save.</div></div>
 
-  <div class="two">
-    <div class="card"><h2>FC, pH, CYA Trend</h2><canvas id="trendChart" width="900" height="360"></canvas></div>
-    <div class="card"><h2>Latest Test vs Target</h2><canvas id="targetChart" width="900" height="360"></canvas></div>
-  </div>
-
   <div class="card"><h2>History</h2><div id="history"></div></div>
+
+  <div class="card">
+    <h2>Trend Charts</h2>
+    <p class="small">Charts are hidden until that parameter has at least 2 tested values. Expand a chart to view it full-width.</p>
+
+    <details id="acc-fc" class="chart-accordion">
+      <summary>FC Trend</summary>
+      <div class="chart-body"><canvas id="chart-fc" width="1100" height="430"></canvas><p class="chart-note">Free chlorine over time.</p></div>
+    </details>
+
+    <details id="acc-cc" class="chart-accordion">
+      <summary>CC Trend</summary>
+      <div class="chart-body"><canvas id="chart-cc" width="1100" height="430"></canvas><p class="chart-note">Combined chlorine over time.</p></div>
+    </details>
+
+    <details id="acc-ph" class="chart-accordion">
+      <summary>pH Trend</summary>
+      <div class="chart-body"><canvas id="chart-ph" width="1100" height="430"></canvas><p class="chart-note">Target range shown from 7.2 to 7.8.</p></div>
+    </details>
+
+    <details id="acc-ta" class="chart-accordion">
+      <summary>TA Trend</summary>
+      <div class="chart-body"><canvas id="chart-ta" width="1100" height="430"></canvas><p class="chart-note">Target range shown from 80 to 120 ppm.</p></div>
+    </details>
+
+    <details id="acc-ch" class="chart-accordion">
+      <summary>CH Trend</summary>
+      <div class="chart-body"><canvas id="chart-ch" width="1100" height="430"></canvas><p class="chart-note">Target range depends on surface type.</p></div>
+    </details>
+
+    <details id="acc-cya" class="chart-accordion">
+      <summary>CYA Trend</summary>
+      <div class="chart-body"><canvas id="chart-cya" width="1100" height="430"></canvas><p class="chart-note">Target range depends on pool type.</p></div>
+    </details>
+
+    <p id="noChartsMsg" class="small">No trend charts yet. Save at least 2 tests for a parameter to show its chart.</p>
+  </div>
 
 <script>
 const STORAGE_KEY='poolHistoryV2';
 const $=id=>document.getElementById(id);
 const fields=['fc','cc','ph','ta','ch','cya'];
 const targets={ph:[7.2,7.8],ta:[80,120],chVinyl:[50,300],chFiberglass:[150,350],chPlaster:[250,450],cyaChlorine:[30,60],cyaSaltwater:[60,80]};
+const hasValue=v=>v!==null&&v!==undefined&&String(v).trim()!==''&&Number.isFinite(Number(v));
+const tested=(r,f)=>hasValue(r[f]);
+const readMaybeNumber=id=>{const v=$(id).value.trim(); if(v==='') return null; const n=Number(v); return Number.isFinite(n)?n:null;};
+const show=v=>hasValue(v)?v:'Not Tested';
 
 function getHistory(){return JSON.parse(localStorage.getItem(STORAGE_KEY)||localStorage.getItem('poolHistory')||'[]').map(normalizeRow)}
 function saveHistory(h){localStorage.setItem(STORAGE_KEY,JSON.stringify(h));}
-function normalizeRow(r){return {date:r.date||new Date().toLocaleString(),ts:r.ts||Date.now(),volume:+(r.volume||$('volume')?.value||20000),poolType:r.poolType||'Chlorine',surface:r.surface||'Vinyl',fc:+r.fc||0,cc:+r.cc||0,ph:+r.ph||0,ta:+r.ta||0,ch:+r.ch||0,cya:+r.cya||0};}
-function targetFC(cya){return Math.max(2, +(cya||0)*0.075)}
+function normalizeRow(r){const row={date:r.date||new Date().toLocaleString(),ts:r.ts||Date.now(),volume:+(r.volume||$('volume')?.value||20000),poolType:r.poolType||'Chlorine',surface:r.surface||'Vinyl'};fields.forEach(f=>row[f]=hasValue(r[f])?Number(r[f]):null);return row;}
+function targetFC(cya){return hasValue(cya)?Math.max(2, Number(cya)*0.075):null}
 function chRange(surface){return surface==='Plaster'?targets.chPlaster:surface==='Fiberglass'?targets.chFiberglass:targets.chVinyl}
 function cyaRange(type){return type==='Saltwater'?targets.cyaSaltwater:targets.cyaChlorine}
-function readInputs(){let r={date:new Date().toLocaleString(),ts:Date.now(),volume:+$('volume').value||20000,poolType:$('poolType').value,surface:$('surface').value};fields.forEach(f=>r[f]=+$ (f).value||0);return r}
+function readInputs(){let r={date:new Date().toLocaleString(),ts:Date.now(),volume:+$('volume').value||20000,poolType:$('poolType').value,surface:$('surface').value};fields.forEach(f=>r[f]=readMaybeNumber(f));return r}
 function fmt(n,d=1){return Number.isFinite(n)?n.toFixed(d):'0'}
 
 function buildRecommendations(r){
   const rec=[],dose=[]; const fcTarget=targetFC(r.cya); const [chLow,chHigh]=chRange(r.surface); const [cyaLow,cyaHigh]=cyaRange(r.poolType);
-  if(r.fc===0) rec.push(['bad','🚨 FC is zero. Add chlorine immediately and retest.']);
-  else if(r.fc<fcTarget) rec.push(['warn',`⚠ FC is low for CYA ${r.cya}. Target is about ${fmt(fcTarget,1)} ppm.`]);
-  else rec.push(['good',`✅ FC is at or above the CYA-based target of ${fmt(fcTarget,1)} ppm.`]);
-  if(r.cc>0.5) rec.push(['warn','⚠ CC is elevated. Watch for odor/cloudiness; consider SLAM guidance if it persists.']);
-  if(r.ph && r.ph<7.2) rec.push(['warn','⚠ pH is low. Raise pH before swimming comfort becomes an issue.']);
-  if(r.ph>7.8) rec.push(['warn','⚠ pH is high. Add muriatic acid/a pH reducer estimate below.']);
-  if(r.ta && r.ta<80) rec.push(['warn','⚠ TA is low. Baking soda estimate below targets 80 ppm.']);
-  if(r.ta>120) rec.push(['warn','⚠ TA is high. Lower gradually with acid/aeration if pH also trends high.']);
-  if(r.ch && (r.ch<chLow||r.ch>chHigh)) rec.push(['warn',`⚠ CH is outside the typical ${r.surface} range (${chLow}-${chHigh} ppm).`]);
-  if(r.cya && r.cya<cyaLow) rec.push(['warn',`⚠ CYA is below the usual ${r.poolType} range (${cyaLow}-${cyaHigh} ppm).`]);
-  if(r.cya>cyaHigh && r.cya<=100) rec.push(['warn',`⚠ CYA is elevated. Avoid tabs/dichlor shock; use liquid chlorine.`]);
-  if(r.cya>100) rec.push(['bad','🚨 CYA is very high. Consider partial drain/refill.']);
 
-  const fcNeeded=Math.max(0,fcTarget-r.fc); const gal10=(fcNeeded*r.volume)/100000; const gal125=(fcNeeded*r.volume)/125000;
-  if(gal10>0.01) dose.push(`10% liquid chlorine: <span class="dose">${fmt(gal10,2)} gal</span> (${fmt(gal10*128,0)} fl oz). 12.5%: <span class="dose">${fmt(gal125,2)} gal</span>.`);
-  if(r.ta && r.ta<80){const lbs=((80-r.ta)*r.volume/10000)*0.14; dose.push(`Baking soda to raise TA to 80 ppm: <span class="dose">${fmt(lbs,1)} lb</span>.`)}
-  if(r.ph>7.8){const oz=((r.ph-7.6)/0.2)*(r.volume/10000)*12; dose.push(`Rough muriatic acid estimate to lower pH toward 7.6: <span class="dose">${fmt(Math.max(0,oz),0)} fl oz</span>. Add in stages and retest.`)}
-  if(r.cya && r.cya<cyaLow){const lbs=((cyaLow-r.cya)*r.volume/10000)*0.083; dose.push(`Stabilizer estimate to reach ${cyaLow} ppm CYA: <span class="dose">${fmt(lbs,1)} lb</span>.`)}
+  if(tested(r,'fc')){
+    if(tested(r,'cya')){
+      if(r.fc===0) rec.push(['bad','🚨 FC is zero. Add chlorine immediately and retest.']);
+      else if(r.fc<fcTarget) rec.push(['warn',`⚠ FC is low for CYA ${r.cya}. Target is about ${fmt(fcTarget,1)} ppm.`]);
+      else rec.push(['good',`✅ FC is at or above the CYA-based target of ${fmt(fcTarget,1)} ppm.`]);
+    } else {
+      if(r.fc===0) rec.push(['bad','🚨 FC tested at zero. Add chlorine immediately and retest.']);
+      else rec.push(['good',`✅ FC was tested at ${fmt(r.fc,1)} ppm. Test CYA when you can to confirm the ideal FC target.`]);
+    }
+  } else rec.push(['note','ℹ FC not tested. No chlorine recommendation was calculated.']);
+
+  if(tested(r,'cc')){
+    if(r.cc>0.5) rec.push(['warn','⚠ CC is elevated. Watch for odor/cloudiness; consider SLAM guidance if it persists.']);
+    else rec.push(['good',`✅ CC was tested at ${fmt(r.cc,1)} ppm.`]);
+  }
+  if(tested(r,'ph')){
+    if(r.ph<7.2) rec.push(['warn','⚠ pH is low. Soda ash estimate below targets about 7.2.']);
+    else if(r.ph>7.8) rec.push(['warn','⚠ pH is high. Muriatic acid estimate below targets about 7.6.']);
+    else rec.push(['good',`✅ pH is in range at ${fmt(r.ph,1)}.`]);
+  }
+  if(tested(r,'ta')){
+    if(r.ta<80) rec.push(['warn','⚠ TA is low. Baking soda estimate below targets 80 ppm.']);
+    else if(r.ta>120) rec.push(['warn','⚠ TA is high. Lower gradually with acid/aeration if pH also trends high.']);
+    else rec.push(['good',`✅ TA is in range at ${fmt(r.ta,0)} ppm.`]);
+  }
+  if(tested(r,'ch')){
+    if(r.ch<chLow||r.ch>chHigh) rec.push(['warn',`⚠ CH is outside the typical ${r.surface} range (${chLow}-${chHigh} ppm).`]);
+    else rec.push(['good',`✅ CH is in the typical ${r.surface} range.`]);
+  }
+  if(tested(r,'cya')){
+    if(r.cya<cyaLow) rec.push(['warn',`⚠ CYA is below the usual ${r.poolType} range (${cyaLow}-${cyaHigh} ppm).`]);
+    else if(r.cya>100) rec.push(['bad','🚨 CYA is very high. Consider partial drain/refill.']);
+    else if(r.cya>cyaHigh) rec.push(['warn',`⚠ CYA is elevated. Avoid tabs/dichlor shock; use liquid chlorine.`]);
+    else rec.push(['good',`✅ CYA is in the usual ${r.poolType} range.`]);
+  }
+
+  if(tested(r,'fc')&&tested(r,'cya')){
+    const fcNeeded=Math.max(0,fcTarget-r.fc); const gal10=(fcNeeded*r.volume)/100000; const gal125=(fcNeeded*r.volume)/125000;
+    if(gal10>0.01) dose.push(`10% liquid chlorine: <span class="dose">${fmt(gal10,2)} gal</span> (${fmt(gal10*128,0)} fl oz). 12.5%: <span class="dose">${fmt(gal125,2)} gal</span>.`);
+  }
+  if(tested(r,'ta') && r.ta<80){const lbs=((80-r.ta)*r.volume/10000)*0.14; dose.push(`Baking soda to raise TA to 80 ppm: <span class="dose">${fmt(lbs,1)} lb</span>.`)}
+  if(tested(r,'ph') && r.ph>7.8){const oz=((r.ph-7.6)/0.2)*(r.volume/10000)*12; dose.push(`Rough muriatic acid estimate to lower pH toward 7.6: <span class="dose">${fmt(Math.max(0,oz),0)} fl oz</span>. Add in stages, circulate, and retest.`)}
+  if(tested(r,'ph') && r.ph<7.2){const lbs=((7.2-r.ph)/0.2)*(r.volume/10000)*0.6; dose.push(`Rough soda ash estimate to raise pH toward 7.2: <span class="dose">${fmt(Math.max(0,lbs),1)} lb</span>. Add in stages, circulate, and retest.`)}
+  if(tested(r,'cya') && r.cya<cyaLow){const lbs=((cyaLow-r.cya)*r.volume/10000)*0.083; dose.push(`Stabilizer estimate to reach ${cyaLow} ppm CYA: <span class="dose">${fmt(lbs,1)} lb</span>.`)}
   return {rec,dose,fcTarget,chLow,chHigh,cyaLow,cyaHigh};
 }
-function analyze(){const r=readInputs(); const h=getHistory(); h.unshift(r); saveHistory(h); renderResults(r); renderAll();}
+function analyze(){const r=normalizeRow(readInputs()); const h=getHistory(); h.unshift(r); saveHistory(h); renderResults(r); renderAll();}
 function renderResults(r){const b=buildRecommendations(r); $('results').innerHTML=b.rec.map(x=>`<div class="note ${x[0]}">${x[1]}</div>`).join('')+`<h3>Dosage estimates</h3>`+(b.dose.length?b.dose.map(x=>`<div class="note">${x}</div>`).join(''):'<div class="note good">No chemical additions estimated from current inputs.</div>')+'<p class="small">Dosages are estimates. Add chemicals separately, circulate, and retest before adding more.</p>';}
-function renderHistory(){const h=getHistory(); if(!h.length){$('history').innerHTML='<p class="small">No saved tests yet.</p>';return} let html='<div class="tablewrap"><table><tr><th>Date</th><th>FC</th><th>CC</th><th>pH</th><th>TA</th><th>CH</th><th>CYA</th><th>Delete</th></tr>'; h.forEach((r,i)=>html+=`<tr><td>${r.date}</td><td>${r.fc}</td><td>${r.cc}</td><td>${r.ph}</td><td>${r.ta}</td><td>${r.ch}</td><td>${r.cya}</td><td><button class="danger" onclick="delRow(${i})">X</button></td></tr>`); $('history').innerHTML=html+'</table></div>';}
+function renderHistory(){const h=getHistory(); if(!h.length){$('history').innerHTML='<p class="small">No saved tests yet.</p>';return} let html='<div class="tablewrap"><table><tr><th>Date</th><th>FC</th><th>CC</th><th>pH</th><th>TA</th><th>CH</th><th>CYA</th><th>Delete</th></tr>'; h.forEach((r,i)=>html+=`<tr><td>${r.date}</td><td>${show(r.fc)}</td><td>${show(r.cc)}</td><td>${show(r.ph)}</td><td>${show(r.ta)}</td><td>${show(r.ch)}</td><td>${show(r.cya)}</td><td><button class="danger" onclick="delRow(${i})">X</button></td></tr>`); $('history').innerHTML=html+'</table></div>';}
 function delRow(i){const h=getHistory();h.splice(i,1);saveHistory(h);renderAll();}
 function clearHistory(){if(confirm('Delete all saved pool history?')){localStorage.removeItem(STORAGE_KEY);localStorage.removeItem('poolHistory');renderAll();}}
 function exportCSV(){const h=getHistory(); if(!h.length){alert('No history to export.');return} const cols=['date','volume','poolType','surface','fc','cc','ph','ta','ch','cya']; const csv=[cols.join(','),...h.map(r=>cols.map(c=>`"${String(r[c]??'').replaceAll('"','""')}"`).join(','))].join('\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='pool-history.csv'; a.click(); URL.revokeObjectURL(a.href);}
 function resetForm(){fields.forEach(f=>$(f).value='');$('results').innerHTML='Enter your test results and click Analyze & Save.';}
 
-function drawLineChart(){const c=$('trendChart'),ctx=c.getContext('2d'),h=getHistory().slice(0,12).reverse(); clearCanvas(ctx,c); if(!h.length){emptyChart(ctx,c,'No history yet');return} const pad=42,w=c.width,hgt=c.height,max=Math.max(100,...h.flatMap(r=>[r.fc,r.ph,r.cya])); axes(ctx,c,pad,max); const colors=['#0f766e','#2563eb','#f97316']; [['fc','FC'],['ph','pH'],['cya','CYA']].forEach((s,si)=>{ctx.strokeStyle=colors[si];ctx.lineWidth=3;ctx.beginPath();h.forEach((r,i)=>{const x=pad+(i*(c.width-pad*1.5))/(Math.max(1,h.length-1));const y=c.height-pad-(r[s[0]]/max)*(c.height-pad*1.6);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();ctx.fillStyle=colors[si];ctx.fillText(s[1],pad+si*60,20);});}
-function drawTargetChart(){const c=$('targetChart'),ctx=c.getContext('2d'),h=getHistory(); clearCanvas(ctx,c); if(!h.length){emptyChart(ctx,c,'No latest test yet');return} const r=h[0],b=buildRecommendations(r),items=[['FC',r.fc,b.fcTarget],['pH',r.ph,7.6],['TA',r.ta,100],['CH',r.ch,(b.chLow+b.chHigh)/2],['CYA',r.cya,(b.cyaLow+b.cyaHigh)/2]]; const max=Math.max(...items.flatMap(x=>[x[1],x[2]]),10)*1.15,pad=48,barW=32,gap=(c.width-pad*2)/items.length; axes(ctx,c,pad,max); items.forEach((it,i)=>{const x=pad+i*gap+gap/2-38; const actualH=(it[1]/max)*(c.height-pad*1.6), targetH=(it[2]/max)*(c.height-pad*1.6); ctx.fillStyle='#0f766e';ctx.fillRect(x,c.height-pad-actualH,barW,actualH);ctx.fillStyle='#94a3b8';ctx.fillRect(x+barW+8,c.height-pad-targetH,barW,targetH);ctx.fillStyle='#102033';ctx.fillText(it[0],x+8,c.height-18);}); ctx.fillStyle='#0f766e';ctx.fillText('Actual',pad,20);ctx.fillStyle='#94a3b8';ctx.fillText('Target',pad+75,20);}
+const CHART_CONFIGS=[
+  {canvasId:'chart-fc',accId:'acc-fc',field:'fc',label:'FC ppm',target:null},
+  {canvasId:'chart-cc',accId:'acc-cc',field:'cc',label:'CC ppm',target:[0,0.5]},
+  {canvasId:'chart-ph',accId:'acc-ph',field:'ph',label:'pH',target:[7.2,7.8]},
+  {canvasId:'chart-ta',accId:'acc-ta',field:'ta',label:'TA ppm',target:[80,120]},
+  {canvasId:'chart-ch',accId:'acc-ch',field:'ch',label:'CH ppm',target:'ch'},
+  {canvasId:'chart-cya',accId:'acc-cya',field:'cya',label:'CYA ppm',target:'cya'}
+];
+
+function targetRangeForChart(cfg,latest){
+  if(Array.isArray(cfg.target)) return cfg.target;
+  if(cfg.target==='ch') return chRange(latest?.surface || $('surface')?.value || 'Vinyl');
+  if(cfg.target==='cya') return cyaRange(latest?.poolType || $('poolType')?.value || 'Chlorine');
+  return null;
+}
+
+function drawAllCharts(){
+  const rows=getHistory().slice(0,20).reverse();
+  let visible=0;
+  CHART_CONFIGS.forEach(cfg=>{
+    const testedRows=rows.filter(r=>tested(r,cfg.field));
+    const acc=$(cfg.accId);
+    if(acc){
+      const showChart=testedRows.length>=2;
+      acc.classList.toggle('hidden',!showChart);
+      if(showChart) visible++;
+      const saved=localStorage.getItem('accordion_'+cfg.field);
+      if(saved!==null) acc.open=saved==='1';
+      acc.ontoggle=()=>localStorage.setItem('accordion_'+cfg.field, acc.open?'1':'0');
+    }
+    if(testedRows.length>=2) drawSingleTrend(cfg,rows,testedRows);
+  });
+  const msg=$('noChartsMsg');
+  if(msg) msg.style.display=visible?'none':'block';
+}
+
+function drawTargetBand(ctx,c,pad,top,bottom,right,min,max,range){
+  if(!range) return;
+  const low=Number(range[0]), high=Number(range[1]);
+  if(!Number.isFinite(low)||!Number.isFinite(high)) return;
+  const yHigh=c.height-bottom-((high-min)/(max-min))*(c.height-top-bottom);
+  const yLow=c.height-bottom-((low-min)/(max-min))*(c.height-top-bottom);
+  const bandTop=Math.max(top,Math.min(yHigh,yLow));
+  const bandBottom=Math.min(c.height-bottom,Math.max(yHigh,yLow));
+  ctx.save();
+  ctx.globalAlpha=.16;
+  ctx.fillStyle='#15803d';
+  ctx.fillRect(pad,bandTop,c.width-pad-right,bandBottom-bandTop);
+  ctx.restore();
+  ctx.fillStyle='#15803d';
+  ctx.font='12px Arial';
+  ctx.fillText(`Target ${low}-${high}`,pad+8,Math.max(top+14,bandTop+14));
+}
+
+function drawSingleTrend(cfg,rows,h){
+  const c=$(cfg.canvasId); if(!c) return;
+  const ctx=c.getContext('2d');
+  clearCanvas(ctx,c);
+  const latest=rows[rows.length-1] || {};
+  const targetRange=targetRangeForChart(cfg,latest);
+  const pad=64, top=28, bottom=78, right=24;
+  const vals=h.map(r=>Number(r[cfg.field]));
+  let min=Math.min(...vals), max=Math.max(...vals);
+  if(targetRange){min=Math.min(min,targetRange[0]); max=Math.max(max,targetRange[1]);}
+  if(cfg.field==='ph'){min=Math.min(6.8,min-.1); max=Math.max(8.2,max+.1);}
+  else {min=Math.max(0,Math.floor(min*.9)); max=Math.ceil(max*1.15 || 10);}
+  if(max===min) max=min+1;
+
+  drawAxes(ctx,c,pad,top,bottom,right,min,max,rows);
+  drawTargetBand(ctx,c,pad,top,bottom,right,min,max,targetRange);
+
+  ctx.strokeStyle='#0f766e';ctx.lineWidth=3;ctx.beginPath();
+  let started=false;
+  h.forEach(r=>{
+    const i=rows.indexOf(r);
+    const x=pad+(i*(c.width-pad-right))/(Math.max(1,rows.length-1));
+    const y=c.height-bottom-((Number(r[cfg.field])-min)/(max-min))*(c.height-top-bottom);
+    started?ctx.lineTo(x,y):ctx.moveTo(x,y); started=true;
+  });
+  if(started)ctx.stroke();
+
+  h.forEach(r=>{
+    const i=rows.indexOf(r);
+    const x=pad+(i*(c.width-pad-right))/(Math.max(1,rows.length-1));
+    const y=c.height-bottom-((Number(r[cfg.field])-min)/(max-min))*(c.height-top-bottom);
+    ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fillStyle='#0f766e';ctx.fill();
+    ctx.fillStyle='#102033';ctx.font='12px Arial';
+    ctx.fillText(String(r[cfg.field]),x+7,y-7);
+  });
+  ctx.fillStyle='#102033';ctx.font='15px Arial';ctx.fillText(cfg.label,pad,20);
+}
+function shortTime(s){
+  const d=new Date(s);
+  if(!isNaN(d)) return `${d.getMonth()+1}/${d.getDate()} ${d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`;
+  return String(s||'').replace(/,\\s*/,' ');
+}
+function drawAxes(ctx,c,pad,top,bottom,right,min,max,rows){
+  ctx.strokeStyle='#d8e2ee';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad,top);ctx.lineTo(pad,c.height-bottom);ctx.lineTo(c.width-right,c.height-bottom);ctx.stroke();
+  ctx.fillStyle='#64748b';ctx.font='13px Arial';
+  for(let i=0;i<=4;i++){
+    const y=c.height-bottom-i*(c.height-top-bottom)/4;
+    const val=min+(max-min)*i/4;
+    ctx.fillText((max-min<=5?val.toFixed(1):Math.round(val)),8,y+4);
+    ctx.strokeStyle='#eef2f7';ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(c.width-right,y);ctx.stroke();
+  }
+  const step=Math.max(1,Math.ceil(rows.length/4));
+  rows.forEach((r,i)=>{
+    if(i%step!==0 && i!==rows.length-1) return;
+    const x=pad+(i*(c.width-pad-right))/(Math.max(1,rows.length-1));
+    ctx.save();ctx.translate(x,c.height-bottom+18);ctx.rotate(-Math.PI/6);ctx.fillStyle='#64748b';ctx.fillText(shortTime(r.date),-4,0);ctx.restore();
+  });
+}
 function clearCanvas(ctx,c){ctx.clearRect(0,0,c.width,c.height);ctx.font='14px Arial';ctx.fillStyle='#102033'}
-function emptyChart(ctx,c,t){ctx.fillStyle='#64748b';ctx.fillText(t,30,50)}
-function axes(ctx,c,pad,max){ctx.strokeStyle='#d8e2ee';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad,20);ctx.lineTo(pad,c.height-pad);ctx.lineTo(c.width-20,c.height-pad);ctx.stroke();ctx.fillStyle='#64748b';for(let i=0;i<=4;i++){let y=c.height-pad-i*(c.height-pad*1.6)/4;ctx.fillText(Math.round(max*i/4),8,y+4);ctx.strokeStyle='#eef2f7';ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(c.width-20,y);ctx.stroke();}}
-function renderAll(){renderHistory();drawLineChart();drawTargetChart();}
-if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));}
+function emptyChart(ctx,c,t){ctx.fillStyle='#64748b';ctx.font='14px Arial';ctx.fillText(t,30,50)}
+function renderAll(){renderHistory();drawAllCharts();}
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').then(reg=>reg.update()).catch(()=>{}));}
 renderAll();
 </script>
 </body>
